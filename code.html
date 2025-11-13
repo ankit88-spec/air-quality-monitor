@@ -821,6 +821,30 @@
             }
         };
 
+        // Local storage fallback for development
+        function loadFromLocalStorage() {
+            try {
+                const stored = localStorage.getItem('airQualityData');
+                if (stored) {
+                    storedRecords = JSON.parse(stored);
+                    updateHistoryDisplay();
+                    updateFavoritesDisplay();
+                    updateAnalytics();
+                    updateStats();
+                }
+            } catch (e) {
+                console.log('No stored data found');
+            }
+        }
+
+        function saveToLocalStorage() {
+            try {
+                localStorage.setItem('airQualityData', JSON.stringify(storedRecords));
+            } catch (e) {
+                console.error('Failed to save to localStorage');
+            }
+        }
+
         // Initialize SDKs
         async function initializeSDKs() {
             // Initialize Data SDK
@@ -829,6 +853,10 @@
                 if (!initResult.isOk) {
                     console.error("Failed to initialize data SDK");
                 }
+            } else {
+                // Fallback to localStorage for development
+                console.log('Data SDK not available, using localStorage');
+                loadFromLocalStorage();
             }
 
             // Initialize Element SDK
@@ -1139,7 +1167,7 @@
 
         // Save current reading to data storage
         async function saveCurrentReading() {
-            if (!currentData || !window.dataSdk) return;
+            if (!currentData) return;
 
             if (storedRecords.length >= 999) {
                 showCustomAlert("Maximum limit of 999 readings reached. Please delete some readings first.");
@@ -1152,24 +1180,34 @@
 
             const recordToSave = {
                 ...currentData,
-                id: Date.now().toString()
+                id: Date.now().toString(),
+                __backendId: Date.now().toString() // For local storage compatibility
             };
 
-            const result = await window.dataSdk.create(recordToSave);
-            
-            if (result.isOk) {
-                saveBtn.textContent = '✅ Saved!';
-                setTimeout(() => {
-                    saveBtn.textContent = '💾 Save Reading';
-                    saveBtn.disabled = false;
-                }, 2000);
+            if (window.dataSdk) {
+                // Use Data SDK if available
+                const result = await window.dataSdk.create(recordToSave);
+                
+                if (result.isOk) {
+                    saveBtn.textContent = '✅ Saved!';
+                } else {
+                    saveBtn.textContent = '❌ Error';
+                }
             } else {
-                saveBtn.textContent = '❌ Error';
-                setTimeout(() => {
-                    saveBtn.textContent = '💾 Save Reading';
-                    saveBtn.disabled = false;
-                }, 2000);
+                // Use localStorage fallback
+                storedRecords.push(recordToSave);
+                saveToLocalStorage();
+                updateHistoryDisplay();
+                updateFavoritesDisplay();
+                updateAnalytics();
+                updateStats();
+                saveBtn.textContent = '✅ Saved!';
             }
+            
+            setTimeout(() => {
+                saveBtn.textContent = '💾 Save Reading';
+                saveBtn.disabled = false;
+            }, 2000);
         }
 
         // Custom alert function (no browser dialogs)
@@ -1534,16 +1572,28 @@
 
         // Toggle favorite status
         async function toggleFavorite(recordId) {
-            if (!window.dataSdk) return;
-            
             const record = storedRecords.find(r => r.__backendId === recordId);
             if (!record) return;
             
             const updatedRecord = { ...record, favorite: !record.favorite };
-            const result = await window.dataSdk.update(updatedRecord);
             
-            if (!result.isOk) {
-                showCustomAlert('Failed to update favorite status');
+            if (window.dataSdk) {
+                // Use Data SDK if available
+                const result = await window.dataSdk.update(updatedRecord);
+                
+                if (!result.isOk) {
+                    showCustomAlert('Failed to update favorite status');
+                }
+            } else {
+                // Use localStorage fallback
+                const index = storedRecords.findIndex(r => r.__backendId === recordId);
+                if (index !== -1) {
+                    storedRecords[index] = updatedRecord;
+                    saveToLocalStorage();
+                    updateHistoryDisplay();
+                    updateFavoritesDisplay();
+                    updateStats();
+                }
             }
         }
 
@@ -1571,12 +1621,26 @@
 
         async function confirmDelete(recordId) {
             const record = storedRecords.find(r => r.__backendId === recordId);
-            if (!record || !window.dataSdk) return;
+            if (!record) return;
             
-            const result = await window.dataSdk.delete(record);
-            
-            if (!result.isOk) {
-                showCustomAlert('Failed to delete reading');
+            if (window.dataSdk) {
+                // Use Data SDK if available
+                const result = await window.dataSdk.delete(record);
+                
+                if (!result.isOk) {
+                    showCustomAlert('Failed to delete reading');
+                }
+            } else {
+                // Use localStorage fallback
+                const index = storedRecords.findIndex(r => r.__backendId === recordId);
+                if (index !== -1) {
+                    storedRecords.splice(index, 1);
+                    saveToLocalStorage();
+                    updateHistoryDisplay();
+                    updateFavoritesDisplay();
+                    updateAnalytics();
+                    updateStats();
+                }
             }
         }
 
@@ -1987,5 +2051,5 @@
             }, 1000);
         });
     </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'99dd903495347f71',t:'MTc2MzAyOTUwNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'99ddbdf794faa79e',t:'MTc2MzAzMTM4Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
